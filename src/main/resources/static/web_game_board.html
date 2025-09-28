@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SQUARES</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 20px; }
+        #controls { margin-bottom: 20px; }
+        #board { display: grid; gap: 2px; }
+        .cell { width: 50px; height: 50px; display: flex; justify-content: center; align-items: center;
+            font-size: 24px; cursor: pointer; background: #eee; }
+        .b { background: blue; color: white; }
+        .w { background: red; color: white; }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <label>Board size: <input type="number" id="sizeInput" value="3" min="3" max="10"></label>
+    <button id="newGameBtn">New game</button>
+</div>
+
+<div id="board"></div>
+<div id="status"></div>
+
+<script>
+    let boardSize = 3;
+    let boardData = [];
+    let gameOver = false;
+
+    function createBoard(size) {
+        boardSize = size;
+        boardData = Array.from({length: size}, () => Array(size).fill(null));
+        gameOver = false;
+
+        const boardEl = document.getElementById('board');
+        boardEl.innerHTML = '';
+        boardEl.style.gridTemplateColumns = `repeat(${size}, 50px)`;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.dataset.x = x;
+                cell.dataset.y = y;
+                cell.addEventListener('click', playerMove);
+                boardEl.appendChild(cell);
+            }
+        }
+
+        document.getElementById('status').textContent = '';
+        renderBoard();
+    }
+
+    async function playerMove(e) {
+        if (gameOver) return;
+
+        const x = parseInt(e.target.dataset.x);
+        const y = parseInt(e.target.dataset.y);
+
+        if (y < 0 || y >= boardSize || x < 0 || x >= boardSize) return;
+        if (boardData[y][x]) return;
+
+        boardData[y][x] = 'b';
+        renderBoard();
+
+        const dto = {
+            size: boardSize,
+            data: boardData.map(r => r.map(c => c || ' ').join('')).join('\n'),
+            nextPlayerColor: 'w'
+        };
+
+        try {
+            const res = await fetch('http://localhost:8080/api/squares/nextMove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dto)
+            });
+            const json = await res.json();
+
+            if (json.move) applyMove(json.move);
+
+            if (json.gameOver) {
+                gameOver = true;
+                document.getElementById('status').textContent = `Game over: ${json.result}`;
+            }
+
+        } catch (err) {
+            document.getElementById('status').textContent = "Ошибка запроса: " + err;
+        }
+    }
+
+    function applyMove(move) {
+        const {x, y, color} = move;
+
+        const row = y - 1;
+        const col = x - 1;
+
+        if (row < 0 || row >= boardSize || col < 0 || col >= boardSize) return;
+        if (boardData[row][col]) return;
+
+        boardData[row][col] = color;
+        renderBoard();
+    }
+
+    function renderBoard() {
+        const cells = document.querySelectorAll('.cell');
+        cells.forEach(cell => {
+            const x = parseInt(cell.dataset.x);
+            const y = parseInt(cell.dataset.y);
+
+            cell.classList.remove('b', 'w');
+            if (boardData[y] && boardData[y][x]) {
+                cell.classList.add(boardData[y][x]);
+            }
+        });
+    }
+
+    document.getElementById('newGameBtn').addEventListener('click', () => {
+        const size = parseInt(document.getElementById('sizeInput').value);
+        createBoard(size);
+    });
+
+    createBoard(boardSize);
+
+</script>
+</body>
+</html>
